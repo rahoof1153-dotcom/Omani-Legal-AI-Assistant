@@ -1,7 +1,13 @@
 [server]
 headless = true
-address = "0.0.0.0"
+# Local development only. Cloud ingress needs separate authenticated review.
+address = "127.0.0.1"
 port = 5000
+enableCORS = true
+enableXsrfProtection = true
+
+[browser]
+gatherUsageStats = false
 
 [theme]
 primaryColor = "#0e4d92"
