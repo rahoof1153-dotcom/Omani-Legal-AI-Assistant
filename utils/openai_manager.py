@@ -9,11 +9,10 @@ class OpenAIManager:
         # Get API key from environment variable
         api_key = os.getenv("OPENAI_API_KEY")
         
-        if not api_key:
-            raise ValueError("OPENAI_API_KEY environment variable not set")
+        # Offline mode must work without a credential; check only after consent.
         
         # Initialize the OpenAI client
-        self.client = OpenAI(api_key=api_key)
+        self.client = None  # Client is constructed only after payload authorization.
         # The newest OpenAI model is "gpt-4o" which was released May 13, 2024
         # do not change this unless explicitly requested by the user
         self.model_name = "gpt-4o"
@@ -30,6 +29,8 @@ class OpenAIManager:
             The model's response as a string
         """
         try:
+            from utils.privacy import require_approved_transmission
+            require_approved_transmission("openai", "generate_response", prompt)
             response = self.client.chat.completions.create(
                 model=self.model_name,
                 messages=[{"role": "user", "content": prompt}],
@@ -38,7 +39,7 @@ class OpenAIManager:
             return response.choices[0].message.content
         except Exception as e:
             error_message = f"Error generating content: {str(e)}"
-            print(error_message)
+            # Do not print raw provider exceptions, paths, or payloads.
             if language == "English":
                 return "I apologize, but I encountered an error while generating a response. Please try again or contact support if the issue persists."
             else:
@@ -341,6 +342,8 @@ class OpenAIManager:
                 """
                 user_prompt = f"Please improve the readability and formatting of the following legal text while preserving the original meaning and legal terminology:\n\n{text}"
             
+            from utils.privacy import require_approved_transmission
+            require_approved_transmission("openai", "readability", user_prompt)
             response = self.client.chat.completions.create(
                 model=self.model_name,
                 messages=[
