@@ -7,6 +7,8 @@ class LLMManager:
     
     def __init__(self):
         """Initialize the LLM manager and configure API"""
+        from utils.privacy import require_approved_transmission
+        require_approved_transmission("gemini", "initialize", "")
         # Get API key from environment variable
         api_key = os.getenv("GOOGLE_API_KEY")
         
@@ -32,7 +34,7 @@ class LLMManager:
                 print(f"Successfully initialized model: {model_name}")
                 break
             except Exception as e:
-                print(f"Error initializing {model_name}: {e}")
+                pass  # Do not print raw provider exception details.
                 time.sleep(1)  # Brief pause before trying the next model
         
         if self.model is None:
@@ -84,7 +86,7 @@ class LLMManager:
             return response.text
         except Exception as e:
             error_message = f"Error generating content: {str(e)}"
-            print(error_message)
+            # Never reveal raw provider errors or prompts.
             if language == "English":
                 return "I apologize, but I encountered an error while generating a response. Please try again or contact support if the issue persists."
             else:
@@ -125,7 +127,7 @@ class LLMManager:
             return response.text
         except Exception as e:
             error_message = f"Error generating content: {str(e)}"
-            print(error_message)
+            # Never reveal raw provider errors or prompts.
             if language == "English":
                 return "I apologize, but I encountered an error while summarizing this article. Please try again or contact support if the issue persists."
             else:
@@ -177,7 +179,7 @@ class LLMManager:
             return response.text
         except Exception as e:
             error_message = f"Error generating content: {str(e)}"
-            print(error_message)
+            # Never reveal raw provider errors or prompts.
             if language == "English":
                 return "I apologize, but I encountered an error while comparing these laws. Please try again or contact support if the issue persists."
             else:
@@ -227,7 +229,7 @@ class LLMManager:
             return response.text
         except Exception as e:
             error_message = f"Error generating content: {str(e)}"
-            print(error_message)
+            # Never reveal raw provider errors or prompts.
             if language == "English":
                 return "I apologize, but I encountered an error while generating the document. Please try again or contact support if the issue persists."
             else:
@@ -287,7 +289,7 @@ class LLMManager:
             return response.text
         except Exception as e:
             error_message = f"Error generating content: {str(e)}"
-            print(error_message)
+            # Never reveal raw provider errors or prompts.
             if language == "English":
                 return "I apologize, but I encountered an error while analyzing this case. Please try again or contact support if the issue persists."
             else:
