@@ -1,204 +1,101 @@
-import os
-import streamlit as st
+"""Private-first, offline-only entry point for the Oman legal research library.
+
+Security Phase 1: cloud AI and case uploads remain deliberately disabled.
+Existing feature modules are preserved in the repository for later audited re-enablement.
+"""
+from __future__ import annotations
+
+from hashlib import sha256
 from pathlib import Path
-import glob
 
-# Import components
-from components.document_qa import document_qa
-from components.article_summarizer import article_summarizer
-from components.law_comparison import law_comparison
-from components.document_creator import document_creator
-from components.case_analyzer import case_analyzer
+import fitz
+import streamlit as st
 
-# Import utilities
-from utils.document_processor import process_pdfs, get_available_laws
-from utils.vector_store import VectorStore
+ROOT = Path(__file__).resolve().parent
+PUBLIC_LIBRARY = ROOT / "data"
+MAX_PDF_BYTES = 100 * 1024 * 1024
+MAX_VISIBLE_RESULTS = 10
+MAX_EXCERPT_CHARS = 1400
 
-# Set page config
 st.set_page_config(
-    page_title="Omani Legal AI Assistant",
+    page_title="Omani Legal Research — Offline",
     page_icon="⚖️",
     layout="wide",
 )
+st.title("Omani Legal Research / البحث القانوني العماني")
+st.info(
+    "OFFLINE MODE. No AI API calls or private-case uploads are enabled. "
+    "Research excerpts are unverified and must be checked against the official Arabic legal text."
+)
+st.caption("الوضع دون اتصال: البحث المحلي فقط. يجب مراجعة النص العربي الرسمي.")
 
-# Initialize session state
-if "vector_store" not in st.session_state:
-    st.session_state.vector_store = None
-if "processed_docs" not in st.session_state:
-    st.session_state.processed_docs = False
-if "available_laws" not in st.session_state:
-    st.session_state.available_laws = []
-if "language" not in st.session_state:
-    st.session_state.language = "English"
-
-# Title and description
-st.title("Omani Legal AI Assistant")
-
-# Language selection
-language_options = ["English", "Arabic"]
-language_col1, language_col2 = st.columns([1, 5])
-with language_col1:
-    selected_language = st.selectbox(
-        "Language", 
-        language_options, 
-        index=language_options.index(st.session_state.language)
-    )
-    
-    if selected_language != st.session_state.language:
-        st.session_state.language = selected_language
-        st.rerun()
-
-# Display content based on selected language
-if st.session_state.language == "English":
-    st.write("Your comprehensive assistant for Omani legal matters.")
-    process_btn_text = "Process Legal Documents"
-    processing_text = "Processing documents... This may take a few minutes."
-    no_docs_text = "No PDF documents found in the current directory. Please add PDF files to continue."
-else:  # Arabic
-    st.write("مساعدك الشامل للمسائل القانونية العمانية.")
-    process_btn_text = "معالجة الوثائق القانونية"
-    processing_text = "جاري معالجة المستندات... قد يستغرق ذلك بضع دقائق."
-    no_docs_text = "لم يتم العثور على مستندات PDF في الدليل الحالي. يرجى إضافة ملفات PDF للمتابعة."
-
-# Find PDF files in the current directory
-pdf_files = glob.glob("*.pdf") + glob.glob("**/*.pdf", recursive=True)
-
-# Create a sample PDF file if none are found
-if not pdf_files:
-    from reportlab.lib.pagesizes import letter
-    from reportlab.pdfgen import canvas
-    import io
-    
-    if st.session_state.language == "English":
-        demo_file_text = "Creating a sample PDF file for demonstration..."
-        demo_law_text = """
-        # Omani Labor Law (Sample)
-        
-        [Article 1]
-        This law shall be called the Labor Law and shall apply to all employers and employees except those excluded by a special provision herein.
-        
-        [Article 2]
-        Employment is a right of every citizen. No person shall be forced to perform work against their will.
-        
-        [Article 3]
-        All citizens are equal in the right to work and in freedom of choice of profession according to rules and conditions set forth by law.
-        
-        [Article 4]
-        It shall be prohibited to violate or evade the provisions of this Law and each condition or agreement to this effect shall be null and void.
-        
-        [Article 5]
-        Arabic shall be the language to be used in all records, contracts, files, statements and other documents provided for in this Law or in any decisions or regulations issued in implementation of this Law.
-        """
-    else:  # Arabic
-        demo_file_text = "إنشاء ملف PDF عينة للعرض التوضيحي..."
-        demo_law_text = """
-        # قانون العمل العُماني (عينة)
-        
-        [المادة 1]
-        يسمى هذا القانون قانون العمل وينطبق على جميع أصحاب العمل والعاملين باستثناء المستبعدين بحكم خاص في هذا القانون.
-        
-        [المادة 2]
-        العمل حق لكل مواطن. لا يجوز إجبار أي شخص على أداء عمل ضد إرادته.
-        
-        [المادة 3]
-        جميع المواطنين متساوون في حق العمل وحرية اختيار المهنة وفقًا للقواعد والشروط المنصوص عليها في القانون.
-        
-        [المادة 4]
-        يُحظر انتهاك أو التحايل على أحكام هذا القانون ويكون كل شرط أو اتفاق على خلاف ذلك باطلاً وباطلاً.
-        
-        [المادة 5]
-        تكون اللغة العربية هي اللغة المستخدمة في جميع السجلات والعقود والملفات والبيانات وغيرها من الوثائق المنصوص عليها في هذا القانون أو في أي قرارات أو لوائح صادرة تنفيذاً لهذا القانون.
-        """
-    
-    with st.spinner(demo_file_text):
-        # Create a PDF
-        pdf_buffer = io.BytesIO()
-        c = canvas.Canvas(pdf_buffer, pagesize=letter)
-        
-        # Title
-        c.setFont("Helvetica-Bold", 16)
-        c.drawString(72, 750, "Omani Labor Law (Sample)")
-        
-        # Content
-        c.setFont("Helvetica", 12)
-        y_position = 700
-        for line in demo_law_text.split('\n'):
-            line = line.strip()
-            if not line:
-                y_position -= 20  # Add space for empty lines
+def approved_pdfs():
+    """Discover only direct PDF children under the explicitly approved data/ root."""
+    if not PUBLIC_LIBRARY.is_dir() or PUBLIC_LIBRARY.is_symlink():
+        return []
+    approved_root = PUBLIC_LIBRARY.resolve()
+    entries = []
+    for candidate in sorted(PUBLIC_LIBRARY.iterdir(), key=lambda p: p.name.casefold()):
+        if candidate.is_symlink() or not candidate.is_file() or candidate.suffix.lower() != ".pdf":
+            continue
+        try:
+            resolved = candidate.resolve(strict=True)
+            if resolved.parent != approved_root:
                 continue
-                
-            if line.startswith('['):
-                c.setFont("Helvetica-Bold", 12)
-                y_position -= 30  # Add more space before articles
-            else:
-                c.setFont("Helvetica", 12)
-            
-            # Check if we need a new page
-            if y_position < 72:
-                c.showPage()
-                y_position = 750
-            
-            c.drawString(72, y_position, line)
-            y_position -= 20
-        
-        c.save()
-        
-        # Write the PDF to disk
-        pdf_data = pdf_buffer.getvalue()
-        with open("oman_labor_law_sample.pdf", "wb") as f:
-            f.write(pdf_data)
-        
-        # Update pdf_files list
-        pdf_files = ["oman_labor_law_sample.pdf"]
-        st.info("Created a sample PDF file for demonstration purposes.")
+            if resolved.stat().st_size > MAX_PDF_BYTES:
+                continue
+            entries.append(candidate)
+        except (OSError, ValueError):
+            continue
+    return entries
 
-# Process PDF files if available
-if pdf_files:
-    if not st.session_state.processed_docs:
-        if st.button(process_btn_text):
-            with st.spinner(processing_text):
-                # Process PDFs and create vector store
-                documents = process_pdfs(pdf_files)
-                st.session_state.vector_store = VectorStore(documents)
-                st.session_state.available_laws = get_available_laws(documents)
-                st.session_state.processed_docs = True
-                st.rerun()
-else:
-    st.warning(no_docs_text)
+def selected_pages(path):
+    """Return raw native text and numbered PDF file pages without reformatting."""
+    if path.is_symlink() or path.parent.resolve() != PUBLIC_LIBRARY.resolve():
+        raise ValueError("Unapproved document location")
+    if path.resolve(strict=True).parent != PUBLIC_LIBRARY.resolve():
+        raise ValueError("Unapproved document location")
+    if path.stat().st_size > MAX_PDF_BYTES:
+        raise ValueError("File exceeds local safety limit")
+    with fitz.open(str(path)) as pdf:
+        if pdf.needs_pass:
+            raise ValueError("Encrypted PDF cannot be read in this mode")
+        digest = sha256(path.read_bytes()).hexdigest()
+        pages = [(i + 1, page.get_text("text", sort=False)) for i, page in enumerate(pdf)]
+    return digest, pages
+
+files = approved_pdfs()
+if not files:
+    st.warning("No approved PDF files found in the local data/ library.")
     st.stop()
 
-# Only show features if documents are processed
-if st.session_state.processed_docs:
-    # Main navigation tabs
-    if st.session_state.language == "English":
-        tabs = st.tabs(["Document Q&A", "Article Summarizer", "Law Comparison", "Document Creator", "Case Analyzer"])
-    else:  # Arabic
-        tabs = st.tabs(["البحث في الوثائق", "ملخص المادة", "مقارنة القوانين", "إنشاء المستندات", "تحليل الحالة"])
-    
-    # Document Q&A
-    with tabs[0]:
-        document_qa(st.session_state.vector_store, st.session_state.language)
-    
-    # Article Summarizer
-    with tabs[1]:
-        article_summarizer(st.session_state.vector_store, st.session_state.available_laws, st.session_state.language)
-    
-    # Law Comparison
-    with tabs[2]:
-        law_comparison(st.session_state.vector_store, st.session_state.available_laws, st.session_state.language)
-    
-    # Document Creator
-    with tabs[3]:
-        document_creator(st.session_state.vector_store, st.session_state.language)
-    
-    # Case Analyzer
-    with tabs[4]:
-        case_analyzer(st.session_state.vector_store, st.session_state.language)
+chosen = st.selectbox("Select one public legal-library PDF / اختر ملفاً", files, format_func=lambda p: p.name)
+if st.button("Read selected PDF offline / قراءة الملف محلياً"):
+    try:
+        file_hash, content = selected_pages(chosen)
+    except (OSError, RuntimeError, ValueError):
+        st.error("Local PDF reading failed. Verify the selected library file.")
+    else:
+        st.session_state["offline_selected"] = chosen.name
+        st.session_state["offline_digest"] = file_hash
+        st.session_state["offline_pages"] = content
 
-# Footer
-st.markdown("---")
-if st.session_state.language == "English":
-    st.markdown("Omani Legal AI Assistant © 2023 | Powered by NuqtaAI and LangChain")
-else:  # Arabic
-    st.markdown("مساعد الذكاء الاصطناعي القانوني العماني © 2023 | مدعوم من NuqtaAI و LangChain")
+if st.session_state.get("offline_selected") == chosen.name:
+    st.caption("SHA-256: " + st.session_state["offline_digest"])
+    query = st.text_input("Search this PDF / ابحث في هذا الملف")
+    if query:
+        matches = [(n, txt) for n, txt in st.session_state["offline_pages"] if query.casefold() in txt.casefold()]
+        st.write(f"Matching file pages: {len(matches)}")
+        for page_number, text in matches[:MAX_VISIBLE_RESULTS]:
+            st.markdown(f"**PDF file page {page_number} — النص المستخرج كما هو**")
+            idx = text.casefold().find(query.casefold())
+            excerpt = text[max(0, idx - 200):min(len(text), idx + MAX_EXCERPT_CHARS)]
+            st.text(excerpt)
+        if len(matches) > MAX_VISIBLE_RESULTS:
+            st.caption("Only the first 10 matching pages are displayed.")
+    else:
+        st.write(f"Loaded {len(st.session_state['offline_pages'])} file pages; search to view excerpts.")
+st.warning(
+    "Private evidence, lawyer documents and passport records must not be added to this public repository. "
+    "Cloud AI, voice and document drafting are disabled until consent and deployment safeguards pass review."
+)
