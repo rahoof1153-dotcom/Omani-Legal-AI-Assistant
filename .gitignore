@@ -1,0 +1,30 @@
+# Secrets and credentials (never commit)
+.env
+.env.*
+!.env.example
+.streamlit/secrets.toml
+*.pem
+*.key
+credentials*.json
+
+# Personal case files / uploaded evidence (outside repository preferred)
+/private/
+/case_files/
+/uploads/
+/tmp/
+/outputs/
+/generated/
+/runtime/
+
+# Tooling, logs and local environments
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.cache/
+*.log
+.config/.semgrep/
+.DS_Store
+
+# NOTE: Existing tracked files are NOT protected retroactively by .gitignore.
+# Inventory and classify every existing PDF before publication.
