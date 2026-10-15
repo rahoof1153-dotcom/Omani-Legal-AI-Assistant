@@ -7,66 +7,36 @@ import arabic_reshaper
 from bidi.algorithm import get_display
 
 def extract_text_from_pdf(pdf_path):
-    """
-    Extract text from a PDF file and maintain structural information.
-    Handle Arabic text properly with reshaping and bidirectional support.
-    
-    Args:
-        pdf_path: Path to the PDF file
-        
-    Returns:
-        A dictionary with the extracted text, metadata, and structured information
+    """Extract unmodified PDF text with a numbered file-page marker.
+
+    On failure, return None. Exception details and source paths are not logged or
+    turned into searchable text. The caller must treat gaps as extraction failures.
     """
     try:
-        doc = fitz.open(pdf_path)
-        text = ""
-        
-        # Extract basic metadata
-        metadata = {
-            "source": pdf_path,
-            "title": os.path.basename(pdf_path),
-            "num_pages": len(doc)
-        }
-        
-        # Extract the law name from the filename or first few pages
-        law_name = os.path.basename(pdf_path).replace('.pdf', '')
-        
-        # Check if the document contains Arabic text
-        has_arabic = False
-        
-        # Iterate through pages and extract text
-        for page_num, page in enumerate(doc):
-            page_text = page.get_text()
-            
-            # Check for Arabic characters
-            if any(ord(c) in range(0x0600, 0x06FF) for c in page_text):
-                has_arabic = True
-            
-            text += f"\n===== Page {page_num + 1} =====\n{page_text}"
-            
-            # Try to extract the actual law name from the first page
-            if page_num == 0:
-                # Look for a title in the first page
-                first_page_text = page_text.strip()
-                lines = first_page_text.split('\n')
-                if len(lines) > 1:
-                    potential_title = lines[0].strip()
-                    if len(potential_title) > 5:  # Assume it's a title if it's long enough
-                        law_name = potential_title
-        
-        metadata["law_name"] = law_name
-        metadata["has_arabic"] = has_arabic
-        
-        return {
-            "text": text,
-            "metadata": metadata
-        }
-    except Exception as e:
-        print(f"Error extracting text from {pdf_path}: {e}")
-        return {
-            "text": f"Error processing document: {str(e)}",
-            "metadata": {"source": pdf_path, "error": str(e)}
-        }
+        with fitz.open(pdf_path) as doc:
+            text_parts = []
+            metadata = {
+                "source": str(pdf_path),
+                "title": os.path.basename(str(pdf_path)),
+                "num_pages": len(doc),
+            }
+            law_name = os.path.basename(str(pdf_path)).replace(".pdf", "")
+            has_arabic = False
+            for page_num, page in enumerate(doc, start=1):
+                page_text = page.get_text()
+                has_arabic = has_arabic or any("\\u0600" <= c <= "\\u06ff" for c in page_text)
+                text_parts.append(f"\\n===== Page {page_num} =====\\n{page_text}")
+                if page_num == 1:
+                    lines = page_text.strip().splitlines()
+                    if lines and len(lines[0].strip()) > 5:
+                        law_name = lines[0].strip()
+            metadata["law_name"] = law_name
+            metadata["has_arabic"] = has_arabic
+            return {"text": "".join(text_parts), "metadata": metadata}
+    except Exception:
+        # Never index an error as if it were content from a legal PDF.
+        return None
+
 
 def identify_articles(text):
     """
